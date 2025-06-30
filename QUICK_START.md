@@ -51,7 +51,7 @@ import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.TOKEN,
-  boxDeveloperToken: 'your_token_here'
+  boxDeveloperToken: 'DEVELOPER_TOKEN'
 });
 
 const loader = new BoxLoader({
