@@ -68,12 +68,12 @@ export class BoxLoader extends BaseDocumentLoader {
           documents.push(doc);
         }
       }
-    }
-
-    if (this.boxFolderId) {
+    } else if (this.boxFolderId) {
       // Load files from folder
       const folderDocs = await this.loadFromFolder(this.boxFolderId, this.recursive);
       documents.push(...folderDocs);
+    } else {
+      throw new Error('No boxFileIds or boxFolderId provided');
     }
 
     return documents;
@@ -85,20 +85,62 @@ export class BoxLoader extends BaseDocumentLoader {
   private async loadFileById(fileId: string): Promise<Document | null> {
     try {
       const client = await this.getClient();
-      
+      const token = await (client as any).auth.retrieveToken();
+
       // Get file info
       const fileInfo = await client.files.getFileById(fileId);
       
-      // Get file content
+      // Get file content using representations following Box guide
       let content = '';
       const fileName = fileInfo.name || '';
-      const fileExtension = fileName.toLowerCase().substring(fileName.lastIndexOf('.'));
       
       try {
-        const contentStream = await client.downloads.downloadFile(fileId);
+        // List all representations with x-rep-hints header
+        const fileWithReps = await client.files.getFileById(fileId, {
+          headers: {
+            'x-rep-hints': '[extracted_text]',
+            "Authorization": `Bearer ${token?.accessToken}`
+          },
+          queryParams: {
+            fields: ['name', 'representations', 'type'],
+          },
+        } as any);
+    
+        // Check if text representation is available
+        if (fileWithReps.representations && fileWithReps?.representations.entries) {
+          const textRep = fileWithReps.representations.entries.find((rep: any) => 
+            rep.representation === 'extracted_text'
+          );
 
-        content = await this.streamToString(contentStream);
-        
+          if (textRep && textRep.status === undefined && textRep.info?.url) {
+            const response = await fetch(textRep.info.url, {
+              headers: {
+                "Authorization": `Bearer ${token?.accessToken}`
+              },
+            });
+
+            if (response.status === 200) {
+              let resprezentation_data = await response.text();
+              console.log(JSON.parse(resprezentation_data));
+              const representation_url = JSON.parse(resprezentation_data)?.content?.url_template.replace('{+asset_path}', '');
+              console.log(representation_url);
+              const textResponse = await fetch(representation_url, {
+                headers: {
+                  "Authorization": `Bearer ${token?.accessToken}`
+                },
+              });
+
+              if (textResponse.ok) {
+                content = await textResponse.text();
+                console.log('Successfully extracted text content from URL template');
+              } else {
+                console.error('Failed to fetch text from URL template:', textResponse.status);
+              }
+            } else {
+              console.error('Failed to fetch text representation url:', response.status, response.statusText);
+            }
+          }
+        }
       } catch (error) {
         content = `[Error reading file: ${fileName}]`;
       }
@@ -107,6 +149,7 @@ export class BoxLoader extends BaseDocumentLoader {
       if (this.characterLimit && content.length > this.characterLimit) {
         content = content.substring(0, this.characterLimit);
       }
+      console.log(content);
 
       return new Document({
         pageContent: content,
@@ -182,18 +225,6 @@ export class BoxLoader extends BaseDocumentLoader {
     }
 
     return items;
-  }
-
-  /**
-   * Convert stream to string
-   */
-  private async streamToString(stream: any): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      stream.on('error', reject);
-      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    });
   }
 
   /**

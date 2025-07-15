@@ -133,7 +133,7 @@ export class BoxAuth {
           auth = new (BoxCcgAuth as any)({
             clientId: this.config.boxClientId,
             clientSecret: this.config.boxClientSecret,
-            // enterpriseId: this.config.boxEnterpriseId,
+            enterpriseId: this.config.boxEnterpriseId,
             userId: this.config.boxUserId
           });
           break;

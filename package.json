@@ -21,7 +21,7 @@
   "author": "Box Developer Relations",
   "license": "MIT",
   "dependencies": {
-    "@langchain/core": "^0.3.0",
+    "@langchain/core": ">=0.1.0",
     "box-typescript-sdk-gen": "^1.16.0"
   },
   "devDependencies": {
