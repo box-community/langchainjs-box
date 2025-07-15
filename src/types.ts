@@ -3,7 +3,8 @@ import {
   BoxDeveloperTokenAuth,
   BoxJwtAuth,
   JwtConfig,
-  BoxCcgAuth
+  BoxCcgAuth,
+  CcgConfig,
 } from 'box-typescript-sdk-gen';
 
 // Re-export the BoxClient type for convenience
@@ -101,7 +102,9 @@ export class BoxAuth {
           break;
 
         case BoxAuthType.JWT:
-          if (this.config.boxJwtPath) {
+          if (this.config.boxJwtConfig && this.config.boxUserId) {
+            console.error('JWT authentication requires either boxJwtPath or boxJwtConfig')
+          } else if (this.config.boxJwtPath) {
             // Read JWT config from file  
             const jwtConfig = JwtConfig.fromConfigFile(this.config.boxJwtPath);
             auth = new BoxJwtAuth({ config: jwtConfig } as any);
@@ -113,6 +116,7 @@ export class BoxAuth {
             }
           } else if (this.config.boxJwtConfig) {
             const jwtConfig = this.config.boxJwtConfig;
+            console.log(jwtConfig);
             
             const jwtAuth = new BoxJwtAuth({
               config: jwtConfig
@@ -121,21 +125,33 @@ export class BoxAuth {
             if (this.config.boxUserId) {
               auth = jwtAuth.withUserSubject(this.config.boxUserId);
             } else {
-              auth = jwtAuth.withEnterpriseSubject(jwtConfig.enterpriseID);
+              auth = jwtAuth.withEnterpriseSubject(jwtConfig.enterpriseId);
             }
           } else {
             console.error('JWT authentication requires either boxJwtPath or boxJwtConfig')
-            throw new Error('JWT authentication requires either boxJwtPath or boxJwtConfig');
           }
           break;
 
         case BoxAuthType.CCG:
-          auth = new (BoxCcgAuth as any)({
-            clientId: this.config.boxClientId,
-            clientSecret: this.config.boxClientSecret,
-            enterpriseId: this.config.boxEnterpriseId,
-            userId: this.config.boxUserId
-          });
+          if (this.config.boxEnterpriseId && this.config.boxUserId) {
+            console.error('CCG authentication requires either boxEnterpriseId or boxUserId')
+          } else if (this.config.boxEnterpriseId) {
+            const ccgConfig = new CcgConfig({
+              clientId: this.config.boxClientId,
+              clientSecret: this.config.boxClientSecret,
+              enterpriseId: this.config.boxEnterpriseId,
+            });
+            auth = new BoxCcgAuth({ config: ccgConfig });
+          } else if (this.config.boxUserId) {
+            const ccgConfig = new CcgConfig({
+              clientId: this.config.boxClientId,
+              clientSecret: this.config.boxClientSecret,
+              userId: this.config.boxUserId
+            });
+            auth = new BoxCcgAuth({ config: ccgConfig });
+          } else {
+            console.error('CCG authentication requires either boxEnterpriseId or boxUserId')
+          }
           break;
 
         default:
