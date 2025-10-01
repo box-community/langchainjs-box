@@ -193,7 +193,7 @@ for await (const doc of loader.lazyLoad()) {
 The package also provides utility functions:
 
 ```typescript
-import { createBoxAuthFromEnv, isTextFile, formatFileSize } from '@langchain/box';
+import { createBoxAuthFromEnv, isTextFile } from '@langchain/box';
 
 // Create authentication from environment variables
 const auth = createBoxAuthFromEnv();
@@ -201,9 +201,6 @@ const auth = createBoxAuthFromEnv();
 // Check if a file is a text file
 const isText = isTextFile('document.txt'); // true
 const isNotText = isTextFile('image.jpg'); // false
-
-// Format file size
-const size = formatFileSize(1024); // "1 KB"
 ```
 
 ## Environment Variables

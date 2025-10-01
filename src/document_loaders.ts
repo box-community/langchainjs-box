@@ -93,6 +93,7 @@ export class BoxLoader extends BaseDocumentLoader {
       // Get file content using representations following Box guide
       let content = '';
       const fileName = fileInfo.name || '';
+      console.log(fileInfo);
       
       try {
         // List all representations with x-rep-hints header
@@ -113,33 +114,58 @@ export class BoxLoader extends BaseDocumentLoader {
           );
 
           if (textRep && textRep.status === undefined && textRep.info?.url) {
-            const response = await fetch(textRep.info.url, {
-              headers: {
-                "Authorization": `Bearer ${token?.accessToken}`
-              },
-            });
+              try {
+                const response = await fetch(textRep.info.url, {
+                  headers: {
+                    "Authorization": `Bearer ${token?.accessToken}`
+                  },
+                });
 
-            if (response.status === 200) {
-              let resprezentation_data = await response.text();
-              console.log(JSON.parse(resprezentation_data));
-              const representation_url = JSON.parse(resprezentation_data)?.content?.url_template.replace('{+asset_path}', '');
-              console.log(representation_url);
-              const textResponse = await fetch(representation_url, {
-                headers: {
-                  "Authorization": `Bearer ${token?.accessToken}`
-                },
-              });
+                if (response.status === 200) {
+                  try {
+                    let resprezentation_data = await response.text();
+                    console.log(JSON.parse(resprezentation_data));
+                    
+                    const parsedData = JSON.parse(resprezentation_data);
+                    const url_template = parsedData?.content?.url_template;
+                    
+                    if (!url_template) {
+                      console.error(`No url_template found in representation data for file ${fileName} (ID: ${fileId})`);
+                      content = `[Error: No text representation URL available for ${fileName}]`;
+                    } else {
+                      const representation_url = url_template.replace('{+asset_path}', '');
+                      console.log(representation_url);
+                      
+                      const textResponse = await fetch(representation_url, {
+                        headers: {
+                          "Authorization": `Bearer ${token?.accessToken}`
+                        },
+                      });
 
-              if (textResponse.ok) {
-                content = await textResponse.text();
-                console.log('Successfully extracted text content from URL template');
-              } else {
-                console.error('Failed to fetch text from URL template:', textResponse.status);
+                      if (textResponse.ok) {
+                        content = await textResponse.text();
+                        console.log(`Successfully extracted text content from ${fileName}`);
+                      } else {
+                        console.error(`Failed to fetch text from URL template for ${fileName}: ${textResponse.status} ${textResponse.statusText}`);
+                        content = `[Error: Failed to fetch text content for ${fileName} - Status: ${textResponse.status}]`;
+                      }
+                    }
+                  } catch (parseError) {
+                    console.error(`Error parsing representation data for ${fileName}:`, parseError);
+                    content = `[Error: Invalid representation data format for ${fileName}]`;
+                  }
+                } else {
+                  console.error(`Failed to fetch text representation URL for ${fileName}: ${response.status} ${response.statusText}`);
+                  content = `[Error: Failed to get text representation URL for ${fileName} - Status: ${response.status}]`;
+                }
+              } catch (fetchError) {
+                console.error(`Network error fetching representation for ${fileName}:`, fetchError);
+                content = `[Error: Network error while fetching text representation for ${fileName}]`;
               }
             } else {
-              console.error('Failed to fetch text representation url:', response.status, response.statusText);
+              console.error(`No valid text representation found for ${fileName} (ID: ${fileId})`);
+              content = `[Error: No text representation available for ${fileName}]`;
             }
-          }
         }
       } catch (error) {
         content = `[Error reading file: ${fileName}]`;

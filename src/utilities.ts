@@ -51,36 +51,60 @@ export function createBoxAuthFromEnv(): BoxAuth {
  */
 export function isTextFile(filename: string): boolean {
   const textExtensions = [
-    '.txt', '.md', '.json', '.xml', '.csv', '.html', '.htm', 
-    '.js', '.ts', '.py', '.java', '.cpp', '.c', '.h', '.css',
-    '.scss', '.sass', '.less', '.sql', '.yaml', '.yml', '.toml',
-    '.ini', '.cfg', '.conf', '.log', '.rtf'
+    // Document formats
+    '.doc', '.docx', '.gdoc', '.gsheet', '.numbers', '.ods', '.odt', '.pages', 
+    '.pdf', '.rtf', '.wpd',
+    
+    // Spreadsheet formats
+    '.xls', '.xlsm', '.xlsx', '.xlsb',
+    
+    // Presentation formats
+    '.gslide', '.gslides', '.key', '.odp', '.ppt', '.pptx',
+    
+    // Programming and markup languages
+    '.as', '.as3', '.asm', '.bat', '.c', '.cc', '.cmake', '.cpp', '.cs', 
+    '.css', '.csv', '.cxx', '.diff', '.erb', '.groovy', '.h', '.haml', 
+    '.hh', '.htm', '.html', '.java', '.js', '.json', '.less', '.log', 
+    '.m', '.make', '.md', '.ml', '.mm', '.msg', '.php', '.pl', 
+    '.properties', '.py', '.rb', '.rst', '.sass', '.scala', '.scm', 
+    '.script', '.sh', '.sml', '.sql', '.txt', '.vi', '.vim', '.webdoc', 
+    '.xhtml', '.xml', '.xsd', '.xsl', '.yaml', '.yml',
+    
+    // Additional formats
+    '.ts', '.scss', '.toml', '.ini', '.cfg', '.conf',
+    
+    // Box-specific formats
+    '.boxnote'
   ];
   
   const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
   return textExtensions.includes(extension);
 }
 
-/**
- * Helper function to get file size in human readable format
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+export function isImageFile(filename: string): boolean {
+  const imageExtensions = [
+    // Common web formats
+    '.gif', '.jpeg', '.jpg', '.png', '.svg',
+    
+    // Professional formats
+    '.bmp', '.eps', '.tif', '.tiff', '.tga',
+    
+    // RAW camera formats
+    '.arw', '.cr2', '.dng', '.nef',
+    
+    // High dynamic range
+    '.exr',
+    
+    // Mobile formats
+    '.heic',
+    
+    // Medical imaging
+    '.dcm', '.dicm', '.dicom', '.svs',
+    
+    // Adobe formats
+    '.indd', '.indml', '.indt', '.inx'
+  ];
   
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  return imageExtensions.includes(extension);
 }
-
-/**
- * Helper function to sanitize folder ID (handle root folder variations)
- */
-export function sanitizeFolderId(folderId: string | number): string {
-  // Box root folder can be represented as '0', 0, or 'root'
-  if (folderId === 'root' || folderId === '0' || folderId === 0) {
-    return '0';
-  }
-  return folderId.toString();
-} 
