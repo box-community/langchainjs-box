@@ -13,7 +13,7 @@ In order to integrate with Box, you need a few things:
 ## Installation
 
 ```bash
-npm install @langchain/box box-typescript-sdk-gen
+npm install @langchain/box box-node-sdk@^10
 ```
 
 ## Authentication

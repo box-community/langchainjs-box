@@ -98,7 +98,6 @@ export class BoxLoader extends BaseDocumentLoader {
       // Get file content using representations following Box guide
       let content = '';
       const fileName = fileInfo.name || '';
-      console.log(fileInfo);
 
       // Skip non-returnable content: images and videos
       if (isImageFile(fileName) || isVideoFile(fileName)) {
@@ -137,7 +136,6 @@ export class BoxLoader extends BaseDocumentLoader {
                 if (response.status === 200) {
                   try {
                     let resprezentation_data = await response.text();
-                    console.log(JSON.parse(resprezentation_data));
                     
                     const parsedData = JSON.parse(resprezentation_data);
                     const url_template = parsedData?.content?.url_template;
@@ -147,7 +145,6 @@ export class BoxLoader extends BaseDocumentLoader {
                       content = `[Error: No text representation URL available for ${fileName}]`;
                     } else {
                       const representation_url = url_template.replace('{+asset_path}', '');
-                      console.log(representation_url);
                       
                       const textResponse = await fetch(representation_url, {
                         headers: {
@@ -189,7 +186,6 @@ export class BoxLoader extends BaseDocumentLoader {
       if (this.characterLimit && content.length > this.characterLimit) {
         content = content.substring(0, this.characterLimit);
       }
-      console.log(content);
 
       return new Document({
         pageContent: content,

@@ -36,13 +36,12 @@ The package is structured as follows:
 ## Implementation Notes
 
 ### Modern Box SDK
-The package uses the new [Box TypeScript SDK Gen](https://github.com/box/box-typescript-sdk-gen) instead of the legacy `box-node-sdk`. This provides several advantages:
+The package uses the next-generation [`box-node-sdk` (v10+)](https://github.com/box/box-node-sdk/tree/sdk-gen), which is auto-generated and provides:
 
-- Full TypeScript support with auto-generated types
+- Full TypeScript support with embedded docs
 - Complete API coverage with rapid updates
-- Modern authentication patterns
+- Modern authentication patterns and convenience methods
 - Better error handling and reliability
-- Embedded documentation in the source code
 
 ### TypeScript Compatibility
 The new Box TypeScript SDK Gen provides complete TypeScript definitions out of the box, eliminating the need for custom type definitions.

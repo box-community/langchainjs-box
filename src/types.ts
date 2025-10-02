@@ -1,11 +1,11 @@
-import { 
+import {
   BoxClient,
   BoxDeveloperTokenAuth,
   BoxJwtAuth,
   JwtConfig,
   BoxCcgAuth,
   CcgConfig,
-} from 'box-typescript-sdk-gen';
+} from 'box-node-sdk';
 
 // Re-export the BoxClient type for convenience
 export type { BoxClient };
@@ -116,7 +116,6 @@ export class BoxAuth {
             }
           } else if (this.config.boxJwtConfig) {
             const jwtConfig = this.config.boxJwtConfig;
-            console.log(jwtConfig);
             
             const jwtAuth = new BoxJwtAuth({
               config: jwtConfig

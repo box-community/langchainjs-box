@@ -1,5 +1,5 @@
 {
-  "name": "@langchain/box",
+  "name": "@langchainjs-box",
   "version": "0.1.0",
   "description": "An integration package connecting Box and LangChain.js",
   "main": "dist/index.js",
@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "prepublishOnly": "npm run build",
+    "pack:dry": "npm pack --dry-run"
   },
   "keywords": [
     "langchain",
@@ -19,7 +21,7 @@
   "author": "Box Developer Relations",
   "license": "MIT",
   "dependencies": {
-    "box-typescript-sdk-gen": "^1.16.0"
+    "box-node-sdk": "^10.0.0"
   },
   "devDependencies": {
     "@langchain/core": ">=0.1.0",
@@ -33,6 +35,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/box/box-langchainjs-connector.git"
