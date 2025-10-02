@@ -1,6 +1,6 @@
 # @langchain/box
 
-This package contains the LangChain.js integration with Box. For more information about Box, check out our [developer documentation](https://developer.box.com/).
+This package contains the Box document loader for LangChain.js. For more information about Box, check out our [developer documentation](https://developer.box.com/).
 
 ## Pre-requisites
 
@@ -8,7 +8,7 @@ In order to integrate with Box, you need a few things:
 
 - A Box instance — if you are not a current Box customer, [sign up for a free dev account](https://developer.box.com/)
 - A Box app — more on how to [create an app](https://developer.box.com/guides/applications/)
-- Your app approved in your Box instance — This is done by your admin. The good news is if you are using a free developer account, you are the admin. [Authorize your app](https://developer.box.com/guides/authorization/)
+- Your app approved in your Box instance — This is done by your Box admin. The good news is if you are using a free developer account, you are the admin. [Authorize your app](https://developer.box.com/guides/authorization/)
 
 ## Installation
 

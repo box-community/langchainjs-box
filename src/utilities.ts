@@ -108,3 +108,12 @@ export function isImageFile(filename: string): boolean {
   const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
   return imageExtensions.includes(extension);
 }
+
+export function isVideoFile(filename: string): boolean {
+  const videoExtensions = [
+    '.mp4', '.m4v', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.mpeg', '.mpg', '.m2ts', '.mts', '.3gp'
+  ];
+
+  const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  return videoExtensions.includes(extension);
+}

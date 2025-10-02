@@ -1,6 +1,7 @@
 import { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
 import { Document } from '@langchain/core/documents';
 import { BoxAuth, BoxLoaderOptions, BoxClient } from './types';
+import { isImageFile, isVideoFile } from './utilities';
 
 /**
  * Box document loader that can load files by ID or from folders
@@ -88,18 +89,29 @@ export class BoxLoader extends BaseDocumentLoader {
       const token = await (client as any).auth.retrieveToken();
 
       // Get file info
-      const fileInfo = await client.files.getFileById(fileId);
+      const fileInfo = await client.files.getFileById(fileId, {
+        headers: {
+          'x-box-ai-library': 'langchain.js'
+        }
+      } as any);
       
       // Get file content using representations following Box guide
       let content = '';
       const fileName = fileInfo.name || '';
       console.log(fileInfo);
+
+      // Skip non-returnable content: images and videos
+      if (isImageFile(fileName) || isVideoFile(fileName)) {
+        console.warn(`Skipping non-text file ${fileName} (ID: ${fileId})`);
+        return null;
+      }
       
       try {
         // List all representations with x-rep-hints header
         const fileWithReps = await client.files.getFileById(fileId, {
           headers: {
             'x-rep-hints': '[extracted_text]',
+            'x-box-ai-library': 'langchain.js',
             "Authorization": `Bearer ${token?.accessToken}`
           },
           queryParams: {
@@ -117,7 +129,8 @@ export class BoxLoader extends BaseDocumentLoader {
               try {
                 const response = await fetch(textRep.info.url, {
                   headers: {
-                    "Authorization": `Bearer ${token?.accessToken}`
+                    "Authorization": `Bearer ${token?.accessToken}`,
+                    'x-box-ai-library': 'langchain.js'
                   },
                 });
 
@@ -130,7 +143,7 @@ export class BoxLoader extends BaseDocumentLoader {
                     const url_template = parsedData?.content?.url_template;
                     
                     if (!url_template) {
-                      console.error(`No url_template found in representation data for file ${fileName} (ID: ${fileId})`);
+                      console.error(`No url_template found in representation data for ${fileName} (ID: ${fileId})`);
                       content = `[Error: No text representation URL available for ${fileName}]`;
                     } else {
                       const representation_url = url_template.replace('{+asset_path}', '');
@@ -138,7 +151,8 @@ export class BoxLoader extends BaseDocumentLoader {
                       
                       const textResponse = await fetch(representation_url, {
                         headers: {
-                          "Authorization": `Bearer ${token?.accessToken}`
+                          "Authorization": `Bearer ${token?.accessToken}`,
+                          'x-box-ai-library': 'langchain.js'
                         },
                       });
 
@@ -235,7 +249,10 @@ export class BoxLoader extends BaseDocumentLoader {
       const response = await (client.folders as any).getFolderItems(folderId, {
         offset,
         limit,
-        fields: ['id', 'name', 'type', 'size', 'created_at', 'modified_at', 'extension']
+        fields: ['id', 'name', 'type', 'size', 'created_at', 'modified_at', 'extension'],
+        headers: {
+          'x-box-ai-library': 'langchain.js'
+        }
       });
 
       if (!response.entries || response.entries.length === 0) {
