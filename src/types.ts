@@ -170,6 +170,13 @@ export class BoxAuth {
       this.client = new BoxClient({ auth });
       return this.client;
     } catch (error) {
+      const anyError = error as any;
+      const status = anyError?.statusCode || anyError?.response?.status;
+      if (status === 401 || status === 403) {
+        console.error('Authentication failed when initializing Box client: invalid or expired credentials/token.', error);
+      } else {
+        console.error('Failed to initialize Box client:', error);
+      }
       throw new Error(`Failed to initialize Box client: ${error}`);
     }
   }

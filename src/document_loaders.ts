@@ -68,6 +68,8 @@ export class BoxLoader extends BaseDocumentLoader {
         const doc = await this.loadFileById(fileId);
         if (doc) {
           documents.push(doc);
+        } else {
+          console.warn(`Failed to load file ${fileId}. Check previous error logs for details.`);
         }
       }
     } else if (this.boxFolderId) {
@@ -121,7 +123,7 @@ export class BoxLoader extends BaseDocumentLoader {
     
         // Check if text representation is available
         if (fileWithReps.representations && fileWithReps?.representations.entries) {
-          const textRep = fileWithReps.representations.entries.find((rep) =>
+          const textRep = fileWithReps.representations.entries.find((rep) => 
             rep.representation === 'extracted_text'
           );
 
@@ -180,6 +182,13 @@ export class BoxLoader extends BaseDocumentLoader {
             }
         }
       } catch (error) {
+        const anyError = error as any;
+        const status = anyError?.statusCode || anyError?.response?.status;
+        if (status === 401 || status === 403) {
+          console.error(`Authentication error accessing file ${fileName} (ID: ${fileId}): invalid or expired token.`, error);
+        } else {
+          console.error(`Error accessing file ${fileName} (ID: ${fileId}):`, error);
+        }
         content = `[Error reading file: ${fileName}]`;
       }
 
@@ -202,6 +211,14 @@ export class BoxLoader extends BaseDocumentLoader {
         }
       });
     } catch (error) {
+      const anyError = error as any;
+      const status = anyError?.statusCode || anyError?.response?.status || anyError?.status;
+      const message = anyError?.message || anyError?.response?.body?.message;
+      if (status === 401 || status === 403) {
+        console.error(`Authentication error loading file ${fileId}: invalid or expired token.`, { status, message, error: anyError });
+      } else {
+        console.error(`Error loading file ${fileId}.`, { status, message, error: anyError });
+      }
       return null;
     }
   }
