@@ -298,9 +298,90 @@ export class BoxLoader extends BaseDocumentLoader {
    * Lazy load implementation
    */
   async *lazyLoad(): AsyncGenerator<Document> {
-    const documents = await this.load();
-    for (const doc of documents) {
-      yield doc;
+    // Stream per item without preloading all documents
+    if (this.boxFileIds && this.boxFileIds.length > 0) {
+      for (const fileId of this.boxFileIds) {
+        const doc = await this.loadFileById(fileId);
+        if (doc) {
+          yield doc;
+        } else {
+          console.warn(`Skipping file ${fileId} due to previous errors.`);
+        }
+      }
+      return;
+    }
+
+    if (this.boxFolderId) {
+      const client = await this.getClient();
+      for await (const fileId of this.iterateFolderFiles(client, this.boxFolderId, this.recursive)) {
+        const doc = await this.loadFileById(fileId);
+        if (doc) {
+          yield doc;
+        } else {
+          console.warn(`Skipping file ${fileId} due to previous errors.`);
+        }
+      }
+      return;
+    }
+
+    throw new Error('No boxFileIds or boxFolderId provided');
+  }
+
+  /**
+   * Iterate files within a folder, optionally recursing into subfolders
+   */
+  private async *iterateFolderFiles(client: BoxClient, folderId: string, recursive: boolean): AsyncGenerator<string> {
+    try {
+      for await (const item of this.getFolderItemsGenerator(client, folderId)) {
+        if (item.type === 'file') {
+          yield item.id as string;
+        } else if (item.type === 'folder' && recursive) {
+          for await (const subFileId of this.iterateFolderFiles(client, item.id as string, recursive)) {
+            yield subFileId;
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error iterating folder ${folderId}:`, error);
+    }
+  }
+
+  /**
+   * Generator that yields folder items page by page without buffering all results
+   */
+  private async *getFolderItemsGenerator(client: BoxClient, folderId: string): AsyncGenerator<Item> {
+    let offset = 0;
+    const limit = 100;
+    let hasMore = true;
+    while (hasMore) {
+      try {
+        const response = await (client.folders as any).getFolderItems(folderId, {
+          offset,
+          limit,
+          fields: ['id', 'name', 'type', 'size', 'created_at', 'modified_at', 'extension'],
+          headers: {
+            'x-box-ai-library': 'langchain.js'
+          }
+        });
+
+        const entries: Item[] = response.entries ?? [];
+        if (entries.length === 0) {
+          hasMore = false;
+          continue;
+        }
+
+        for (const entry of entries) {
+          yield entry;
+        }
+
+        offset += entries.length;
+        if (entries.length < limit) {
+          hasMore = false;
+        }
+      } catch (error) {
+        console.error(`Error fetching items for folder ${folderId}:`, error);
+        break;
+      }
     }
   }
 } 
