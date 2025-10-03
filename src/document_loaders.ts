@@ -4,6 +4,9 @@ import { BoxAuth, BoxLoaderOptions, BoxClient, BoxAuthType } from './types';
 import type { Item } from 'box-node-sdk/lib/schemas/item.js';
 import { isImageFile, isVideoFile } from './utilities';
 
+const REPRESENTATION_TYPE = 'extracted_text';
+// const REPRESENTATION_TYPE = 'markdown';
+
 /**
  * Box document loader that can load files by ID or from folders
  */
@@ -112,7 +115,7 @@ export class BoxLoader extends BaseDocumentLoader {
         // List all representations with x-rep-hints header
         const fileWithReps = await client.files.getFileById(fileId, {
           headers: {
-            'x-rep-hints': '[extracted_text]',
+            'x-rep-hints': REPRESENTATION_TYPE,
             'x-box-ai-library': 'langchain.js',
             "Authorization": `Bearer ${token?.accessToken}`
           },
@@ -124,12 +127,52 @@ export class BoxLoader extends BaseDocumentLoader {
         // Check if text representation is available
         if (fileWithReps.representations && fileWithReps?.representations.entries) {
           const textRep = fileWithReps.representations.entries.find((rep) => 
-            rep.representation === 'extracted_text'
+            rep.representation === REPRESENTATION_TYPE
           );
 
-          if (textRep && textRep.status === undefined && textRep.info?.url) {
+          if (textRep) {
+            let workingRep: any = textRep;
+            let state: string | undefined = workingRep.status?.state as string | undefined; // e.g., 'success', 'pending', 'error', 'none'
+            let isReady = (!state && !!workingRep.info?.url) || state === 'success' || state === 'viewable';
+
+            // Retry readiness when pending/processing
+            if (!isReady && (state === 'pending' || state === 'processing')) {
+              const maxRetries = 3;
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                const delayMs = 1500 * attempt;
+                console.warn(`Text representation not ready for ${fileName} (ID: ${fileId}). Retrying in ${delayMs}ms (${attempt}/${maxRetries})...`);
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+                try {
+                  const refreshed = await client.files.getFileById(fileId, {
+                    headers: {
+                      'x-rep-hints': REPRESENTATION_TYPE,
+                      'x-box-ai-library': 'langchain.js',
+                      "Authorization": `Bearer ${token?.accessToken}`
+                    },
+                    queryParams: {
+                      fields: ['name', 'representations', 'type'],
+                    },
+                  } as any);
+                  const refreshedRep = refreshed.representations?.entries?.find((rep: any) => rep.representation === REPRESENTATION_TYPE);
+                  if (refreshedRep) {
+                    workingRep = refreshedRep;
+                    state = workingRep.status?.state as string | undefined;
+                    isReady = (!state && !!workingRep.info?.url) || state === 'success' || state === 'viewable';
+                    if (isReady) {
+                      break;
+                    }
+                  }
+                } catch (refreshError) {
+                  console.error(`Error refreshing representation for ${fileName} (ID: ${fileId}):`, refreshError);
+                  break;
+                }
+              }
+            }
+
+            if (isReady && workingRep.info?.url) {
               try {
-                const response = await fetch(textRep.info.url, {
+                const response = await fetch(workingRep.info.url, {
                   headers: {
                     "Authorization": `Bearer ${token?.accessToken}`,
                     'x-box-ai-library': 'langchain.js'
@@ -176,10 +219,28 @@ export class BoxLoader extends BaseDocumentLoader {
                 console.error(`Network error fetching representation for ${fileName}:`, fetchError);
                 content = `[Error: Network error while fetching text representation for ${fileName}]`;
               }
+            } else if (state === 'pending' || state === 'processing') {
+              const statusMessage = (workingRep.status as any)?.message as string | undefined;
+              console.warn(`${REPRESENTATION_TYPE} representation is not ready for ${fileName} (ID: ${fileId}) yet: ${state}${statusMessage ? ` - ${statusMessage}` : ''}`);
+              content = `[Info: ${REPRESENTATION_TYPE} representation still processing for ${fileName}]`;
+            } else if (state === 'none') {
+              console.warn(`No ${REPRESENTATION_TYPE} representation available for ${fileName} (ID: ${fileId}).`);
+              content = `[Error: No ${REPRESENTATION_TYPE} representation available for ${fileName}]`;
+            } else if (state === 'error' || state === 'failed') {
+              const statusMessage = (workingRep.status as any)?.message as string | undefined;
+              console.error(`${REPRESENTATION_TYPE} representation generation failed for ${fileName} (ID: ${fileId})${statusMessage ? `: ${statusMessage}` : ''}`);
+              content = `[Error: ${REPRESENTATION_TYPE} extraction failed for ${fileName}]`;
             } else {
-              console.error(`No valid text representation found for ${fileName} (ID: ${fileId})`);
-              content = `[Error: No text representation available for ${fileName}]`;
+              console.warn(`Unknown ${REPRESENTATION_TYPE} representation state for ${fileName} (ID: ${fileId}): ${state ?? 'unknown'}`);
+              content = `[Error: Unknown ${REPRESENTATION_TYPE} representation state for ${fileName}]`;
             }
+          } else {
+            console.error(`No ${REPRESENTATION_TYPE} representation found for ${fileName} (ID: ${fileId})`);
+            content = `[Error: No ${REPRESENTATION_TYPE} representation available for ${fileName}]`;
+          }
+        } else {
+          console.error(`Representations list is empty for ${fileName} (ID: ${fileId})`);
+          content = `[Error: No representations available for ${fileName}]`;
         }
       } catch (error) {
         const anyError = error as any;
