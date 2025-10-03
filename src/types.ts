@@ -40,7 +40,7 @@ export interface BoxTokenAuthConfig extends BoxAuthConfig {
 export interface BoxJWTAuthConfig extends BoxAuthConfig {
   authType: BoxAuthType.JWT;
   boxJwtPath?: string;
-  boxJwtConfig?: any; // JWT config object
+  boxJwtConfig?: JwtConfig; // JWT config object
   boxUserId?: string; // Optional user ID for JWT user authentication
 }
 
@@ -92,70 +92,80 @@ export class BoxAuth {
     }
 
     try {
-      let auth: any;
-
-      switch (this.config.authType) {
-        case BoxAuthType.TOKEN:
-          auth = new BoxDeveloperTokenAuth({
-            token: this.config.boxDeveloperToken
-          });
-          break;
-
-        case BoxAuthType.JWT:
-          if (this.config.boxJwtConfig && this.config.boxUserId) {
-            console.error('JWT authentication requires either boxJwtPath or boxJwtConfig')
-          } else if (this.config.boxJwtPath) {
-            // Read JWT config from file  
-            const jwtConfig = JwtConfig.fromConfigFile(this.config.boxJwtPath);
-            auth = new BoxJwtAuth({ config: jwtConfig } as any);
-
-            if (this.config.boxUserId) {
-              auth = auth.withUserSubject(this.config.boxUserId);
-            } else {
-              auth = auth.withEnterpriseSubject(jwtConfig.enterpriseId);
-            }
-          } else if (this.config.boxJwtConfig) {
-            const jwtConfig = this.config.boxJwtConfig;
-            
-            const jwtAuth = new BoxJwtAuth({
-              config: jwtConfig
-            } as any);
-            
-            if (this.config.boxUserId) {
-              auth = jwtAuth.withUserSubject(this.config.boxUserId);
-            } else {
-              auth = jwtAuth.withEnterpriseSubject(jwtConfig.enterpriseId);
-            }
-          } else {
-            console.error('JWT authentication requires either boxJwtPath or boxJwtConfig')
-          }
-          break;
-
-        case BoxAuthType.CCG:
-          if (this.config.boxEnterpriseId && this.config.boxUserId) {
-            console.error('CCG authentication requires either boxEnterpriseId or boxUserId')
-          } else if (this.config.boxEnterpriseId) {
-            const ccgConfig = new CcgConfig({
-              clientId: this.config.boxClientId,
-              clientSecret: this.config.boxClientSecret,
-              enterpriseId: this.config.boxEnterpriseId,
+      const auth: BoxDeveloperTokenAuth | BoxJwtAuth | BoxCcgAuth = (() => {
+        switch (this.config.authType) {
+          case BoxAuthType.TOKEN: {
+            return new BoxDeveloperTokenAuth({
+              token: (this.config as BoxTokenAuthConfig).boxDeveloperToken
             });
-            auth = new BoxCcgAuth({ config: ccgConfig });
-          } else if (this.config.boxUserId) {
-            const ccgConfig = new CcgConfig({
-              clientId: this.config.boxClientId,
-              clientSecret: this.config.boxClientSecret,
-              userId: this.config.boxUserId
-            });
-            auth = new BoxCcgAuth({ config: ccgConfig });
-          } else {
-            console.error('CCG authentication requires either boxEnterpriseId or boxUserId')
           }
-          break;
 
-        default:
-          throw new Error(`Unsupported authentication type: ${(this.config as any).authType}`);
-      }
+          case BoxAuthType.JWT: {
+            // Prevent ambiguous configuration
+            const { boxJwtPath, boxJwtConfig, boxUserId } = this.config as BoxJWTAuthConfig;
+            if (!boxJwtPath && !boxJwtConfig) {
+              throw new Error('JWT authentication requires either boxJwtPath or boxJwtConfig');
+            }
+
+            if (boxJwtPath && boxJwtConfig) {
+              throw new Error('Provide either boxJwtPath or boxJwtConfig, not both, for JWT auth');
+            }
+
+            if (boxJwtPath) {
+              const jwtConfig = JwtConfig.fromConfigFile(boxJwtPath);
+              const baseAuth = new BoxJwtAuth({ config: jwtConfig });
+              if (boxUserId) {
+                return baseAuth.withUserSubject(boxUserId);
+              }
+              const enterpriseId = jwtConfig.enterpriseId;
+              if (!enterpriseId) {
+                throw new Error('JWT config missing enterpriseId for enterprise subject');
+              }
+              return baseAuth.withEnterpriseSubject(enterpriseId);
+            }
+
+            // boxJwtConfig path
+            const jwtConfig = (boxJwtConfig as JwtConfig);
+            const baseAuth = new BoxJwtAuth({ config: jwtConfig });
+            if (boxUserId) {
+              return baseAuth.withUserSubject(boxUserId);
+            }
+            const enterpriseId = jwtConfig.enterpriseId;
+            if (!enterpriseId) {
+              throw new Error('JWT config missing enterpriseId for enterprise subject');
+            }
+            return baseAuth.withEnterpriseSubject(enterpriseId);
+          }
+
+          case BoxAuthType.CCG: {
+            const { boxClientId, boxClientSecret, boxEnterpriseId, boxUserId } = this.config as BoxCCGAuthConfig;
+            if (boxEnterpriseId && boxUserId) {
+              throw new Error('CCG requires either boxEnterpriseId or boxUserId, not both');
+            }
+            if (boxEnterpriseId) {
+              const ccgConfig = new CcgConfig({
+                clientId: boxClientId,
+                clientSecret: boxClientSecret,
+                enterpriseId: boxEnterpriseId,
+              });
+              return new BoxCcgAuth({ config: ccgConfig });
+            }
+            if (boxUserId) {
+              const ccgConfig = new CcgConfig({
+                clientId: boxClientId,
+                clientSecret: boxClientSecret,
+                userId: boxUserId
+              });
+              return new BoxCcgAuth({ config: ccgConfig });
+            }
+            throw new Error('CCG requires either boxEnterpriseId or boxUserId');
+          }
+
+          default: {
+            throw new Error('Unsupported authentication type');
+          }
+        }
+      })();
 
       this.client = new BoxClient({ auth });
       return this.client;

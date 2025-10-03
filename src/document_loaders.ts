@@ -1,6 +1,7 @@
 import { BaseDocumentLoader } from '@langchain/core/document_loaders/base';
 import { Document } from '@langchain/core/documents';
-import { BoxAuth, BoxLoaderOptions, BoxClient } from './types';
+import { BoxAuth, BoxLoaderOptions, BoxClient, BoxAuthType } from './types';
+import type { Item } from 'box-node-sdk/lib/schemas/item.js';
 import { isImageFile, isVideoFile } from './utilities';
 
 /**
@@ -22,7 +23,7 @@ export class BoxLoader extends BaseDocumentLoader {
       const developerToken = process.env.BOX_DEVELOPER_TOKEN;
       if (developerToken) {
         this.boxAuth = new BoxAuth({
-          authType: 'TOKEN' as any,
+          authType: BoxAuthType.TOKEN,
           boxDeveloperToken: developerToken
         });
       } else {
@@ -120,7 +121,7 @@ export class BoxLoader extends BaseDocumentLoader {
     
         // Check if text representation is available
         if (fileWithReps.representations && fileWithReps?.representations.entries) {
-          const textRep = fileWithReps.representations.entries.find((rep: any) => 
+          const textRep = fileWithReps.representations.entries.find((rep) =>
             rep.representation === 'extracted_text'
           );
 
@@ -135,18 +136,18 @@ export class BoxLoader extends BaseDocumentLoader {
 
                 if (response.status === 200) {
                   try {
-                    let resprezentation_data = await response.text();
-                    
-                    const parsedData = JSON.parse(resprezentation_data);
-                    const url_template = parsedData?.content?.url_template;
-                    
-                    if (!url_template) {
+                    const representationData = await response.text();
+
+                    const parsedData = JSON.parse(representationData);
+                    const urlTemplate = parsedData?.content?.url_template;
+
+                    if (!urlTemplate) {
                       console.error(`No url_template found in representation data for ${fileName} (ID: ${fileId})`);
                       content = `[Error: No text representation URL available for ${fileName}]`;
                     } else {
-                      const representation_url = url_template.replace('{+asset_path}', '');
-                      
-                      const textResponse = await fetch(representation_url, {
+                      const representationUrl = urlTemplate.replace('{+asset_path}', '');
+
+                      const textResponse = await fetch(representationUrl, {
                         headers: {
                           "Authorization": `Bearer ${token?.accessToken}`,
                           'x-box-ai-library': 'langchain.js'
@@ -236,12 +237,19 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Get items from a folder
    */
-  private async getFolderItems(client: BoxClient, folderId: string): Promise<any[]> {
-    const items: any[] = [];
+  private async getFolderItems(client: BoxClient, folderId: string): Promise<Item[]> {
+    const items: Item[] = [];
     let offset = 0;
     const limit = 100;
 
-    while (true) {
+    // Iterate until fewer than limit items are returned
+    // to avoid using a constant condition in the loop
+    // and satisfy ESLint's no-constant-condition rule
+    // by breaking when the page is smaller than the limit
+    // or there are no more entries.
+    // Using a do-while pattern with a guard variable.
+    let hasMore = true;
+    while (hasMore) {
       const response = await (client.folders as any).getFolderItems(folderId, {
         offset,
         limit,
@@ -251,15 +259,18 @@ export class BoxLoader extends BaseDocumentLoader {
         }
       });
 
-      if (!response.entries || response.entries.length === 0) {
-        break;
+      const entries = response.entries ?? [];
+
+      if (entries.length === 0) {
+        hasMore = false;
+        continue;
       }
 
-      items.push(...response.entries);
-      offset += response.entries.length;
+      items.push(...entries);
+      offset += entries.length;
 
-      if (response.entries.length < limit) {
-        break;
+      if (entries.length < limit) {
+        hasMore = false;
       }
     }
 

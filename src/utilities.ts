@@ -1,4 +1,4 @@
-import { BoxAuth, BoxAuthType, BoxAuthConfigType } from './types';
+import { BoxAuth, BoxAuthType } from './types';
 
 /**
  * Helper function to create BoxAuth from environment variables
