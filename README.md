@@ -1,4 +1,4 @@
-# @langchainjs-box
+# langchainjs-box
 
 This package contains the Box document loader for LangChain.js. For more information about Box, check out our [developer documentation](https://developer.box.com/).
 
@@ -14,12 +14,12 @@ In order to integrate with Box, you need a few things:
 ## Installation
 
 ```bash
-npm install @langchainjs-box @langchain/core
+npm install langchainjs-box
 ```
 
 ## Authentication
 
-The `@langchainjs-box` package offers some flexibility to authentication. The most basic authentication method is by using a developer token. This can be found in the [Box developer console](https://app.box.com/developers/console) on the configuration screen. This token is purposely short-lived (1 hour) and is intended for development. With this token, you can add it to your environment as `BOX_DEVELOPER_TOKEN`, you can pass it directly to the loader, or you can use the `BoxAuth` authentication helper class.
+The `langchainjs-box` package offers some flexibility to authentication. The most basic authentication method is by using a developer token. This can be found in the [Box developer console](https://app.box.com/developers/console) on the configuration screen. This token is purposely short-lived (1 hour) and is intended for development. With this token, you can add it to your environment as `BOX_DEVELOPER_TOKEN`, you can pass it directly to the loader, or you can use the `BoxAuth` authentication helper class.
 
 ### BoxAuth helper class
 
@@ -40,7 +40,7 @@ For more information, learn about how to [set up a Box application](https://deve
 **Developer Token**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
+import { BoxLoader, BoxAuth, BoxAuthType } from 'langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.TOKEN,
@@ -59,7 +59,7 @@ const docs = await loader.load();
 // Ensure that service account has been added as a colaborator to content
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
+import { BoxLoader, BoxAuth, BoxAuthType } from 'langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.JWT,
@@ -77,7 +77,7 @@ const docs = await loader.load();
 **JWT with a specified user**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
+import { BoxLoader, BoxAuth, BoxAuthType } from 'langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.JWT,
@@ -97,7 +97,7 @@ const docs = await loader.load();
 // Ensure that service account has been added as a colaborator to content
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
+import { BoxLoader, BoxAuth, BoxAuthType } from 'langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
@@ -117,7 +117,7 @@ const docs = await loader.load();
 **CCG with a specified user**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
+import { BoxLoader, BoxAuth, BoxAuthType } from 'langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
@@ -156,7 +156,7 @@ If getting files from a folder with folder ID, you can also set a boolean to tel
 ### Load files
 
 ```typescript
-import { BoxLoader } from '@langchainjs-box';
+import { BoxLoader } from 'langchainjs-box';
 
 // Using environment variable BOX_DEVELOPER_TOKEN
 process.env.BOX_DEVELOPER_TOKEN = 'your_developer_token_here';
@@ -172,7 +172,7 @@ const docs = await loader.load();
 ### Load from folder
 
 ```typescript
-import { BoxLoader } from '@langchainjs-box';
+import { BoxLoader } from 'langchainjs-box';
 
 // Using environment variable BOX_DEVELOPER_TOKEN
 process.env.BOX_DEVELOPER_TOKEN = 'your_developer_token_here';
@@ -189,7 +189,7 @@ const docs = await loader.load();
 ### Lazy loading
 
 ```typescript
-import { BoxLoader } from '@langchainjs-box';
+import { BoxLoader } from 'langchainjs-box';
 
 const loader = new BoxLoader({
   boxFolderId: 'FOLDER_ID'

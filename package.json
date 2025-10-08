@@ -1,9 +1,16 @@
 {
-  "name": "@langchainjs-box",
+  "name": "langchainjs-box",
   "version": "0.1.0",
   "description": "An integration package connecting Box and LangChain.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -26,7 +33,7 @@
     "box-node-sdk": "^10.0.0"
   },
   "devDependencies": {
-    "@langchain/core": ">=0.1.0",
+    "@langchain/core": "0.3.78",
     "@types/node": "^20.19.1",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
@@ -35,7 +42,7 @@
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "@langchain/core": ">=0.1.0"
+    "@langchain/core": ">=0.3.78 <1.0.0"
   },
   "engines": {
     "node": ">=20"
