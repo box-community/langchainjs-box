@@ -108,45 +108,8 @@ export class BoxLoader extends BaseDocumentLoader {
 
       let content = '';
       try {
-        const { rep, content: repContent } = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
-        if (!rep) {
-          content = repContent || '';
-        } else {
-          const { url, content: urlContent } = await this.getRepresentationUrlFromInfo(rep.info?.url, token, fileName, fileId, repType);
-          if (!url) {
-            content = urlContent || '';
-          } else {
-            const { text, content: textContent } = await this.fetchFromRepresentationUrl(url, token, fileName, repType);
-            content = text ?? textContent ?? '';
-
-            // If representation content is empty on first try, refresh status and retry fetch
-            if ((content ?? '').trim().length === 0) {
-              console.warn(`Empty ${repType} content received for ${fileName}. Rechecking representation status and retrying...`);
-              const maxEmptyRetries = 2;
-              for (let attempt = 1; attempt <= maxEmptyRetries; attempt++) {
-                const delayMs = 1000 * attempt;
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-                try {
-                  const refreshed = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
-                  if (!refreshed.rep) {
-                    continue;
-                  }
-                  const { url: retryUrl } = await this.getRepresentationUrlFromInfo(refreshed.rep.info?.url, token, fileName, fileId, repType);
-                  if (!retryUrl) {
-                    continue;
-                  }
-                  const { text: retryText } = await this.fetchFromRepresentationUrl(retryUrl, token, fileName, repType);
-                  if ((retryText ?? '').trim().length > 0) {
-                    content = retryText as string;
-                    break;
-                  }
-                } catch (retryError) {
-                  console.warn(`Retry ${attempt}/${maxEmptyRetries} failed to retrieve non-empty ${repType} content for ${fileName}.`, retryError);
-                }
-              }
-            }
-          }
-        }
+        const { content: extracted } = await this.extractRepresentationContent(client, fileId, token, fileName, repType);
+        content = extracted;
       } catch (error) {
         const anyError = error as any;
         const status = anyError?.statusCode || anyError?.response?.status;
@@ -317,12 +280,65 @@ export class BoxLoader extends BaseDocumentLoader {
         return { content: `[Error: Failed to fetch ${repType} content for ${fileName} - Status: ${textResponse.status}]` };
       }
       const text = await textResponse.text();
-      console.log(`Successfully extracted ${repType} content from ${fileName}`);
+      if ((text ?? '').trim().length > 0) {
+        console.log(`Fetched ${repType} content for ${fileName} (${text.length} chars)`);
+      } else {
+        console.warn(`Fetched ${repType} content for ${fileName} but it is empty`);
+      }
       return { text };
     } catch (fetchError) {
       console.error(`Network error fetching representation for ${fileName}:`, fetchError);
       return { content: `[Error: Network error while fetching ${repType} representation for ${fileName}]` };
     }
+  }
+
+  /**
+   * Extract representation content with retries and consistent logging
+   */
+  private async extractRepresentationContent(client: BoxClient, fileId: string, token: any, fileName: string, repType: string): Promise<{ content: string }> {
+    const { rep, content: repMessage } = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
+    if (!rep) {
+      return { content: repMessage || '' };
+    }
+
+    const { url, content: urlMessage } = await this.getRepresentationUrlFromInfo(rep.info?.url, token, fileName, fileId, repType);
+    if (!url) {
+      return { content: urlMessage || '' };
+    }
+
+    const { text, content: textMessage } = await this.fetchFromRepresentationUrl(url, token, fileName, repType);
+    let finalContent = text ?? textMessage ?? '';
+
+    if ((finalContent ?? '').trim().length > 0) {
+      return { content: finalContent };
+    }
+
+    // Empty content: retry by refreshing representation status and URL
+    console.warn(`Empty ${repType} content received for ${fileName}. Rechecking representation status and retrying...`);
+    const maxEmptyRetries = 2;
+    for (let attempt = 1; attempt <= maxEmptyRetries; attempt++) {
+      const delayMs = 1000 * attempt;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const refreshed = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
+        if (!refreshed.rep) {
+          continue;
+        }
+        const { url: retryUrl } = await this.getRepresentationUrlFromInfo(refreshed.rep.info?.url, token, fileName, fileId, repType);
+        if (!retryUrl) {
+          continue;
+        }
+        const { text: retryText } = await this.fetchFromRepresentationUrl(retryUrl, token, fileName, repType);
+        if ((retryText ?? '').trim().length > 0) {
+          finalContent = retryText as string;
+          break;
+        }
+      } catch (retryError) {
+        console.warn(`Retry ${attempt}/${maxEmptyRetries} failed to retrieve non-empty ${repType} content for ${fileName}.`, retryError);
+      }
+    }
+
+    return { content: finalContent };
   }
 
   /**
