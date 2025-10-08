@@ -37,7 +37,7 @@ For more information, learn about how to [set up a Box application](https://deve
 
 ### Examples:
 
-**Token**
+**Developer Token**
 
 ```typescript
 import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
@@ -49,13 +49,14 @@ const auth = new BoxAuth({
 
 const loader = new BoxLoader({
   boxAuth: auth,
-  boxFileIds: ['12345', '67890']
+  boxFileIds: ['FILE_ID_1', 'FILE_ID_2']
 });
 
 const docs = await loader.load();
 ```
 
 **JWT with a service account**
+// Ensure that service account has been added as a colaborator to content
 
 ```typescript
 import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
@@ -93,15 +94,16 @@ const docs = await loader.load();
 ```
 
 **CCG with a service account**
+// Ensure that service account has been added as a colaborator to content
 
 ```typescript
 import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
-  boxClientId: 'your_client_id',
-  boxClientSecret: 'your_client_secret',
-  boxEnterpriseId: 'your_enterprise_id'
+  boxClientId: 'CLIENT_ID',
+  boxClientSecret: 'CLIENT_SECRET',
+  boxEnterpriseId: 'ENTERPRISE_ID'
 });
 
 const loader = new BoxLoader({
@@ -119,9 +121,9 @@ import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
-  boxClientId: 'your_client_id',
-  boxClientSecret: 'your_client_secret',
-  boxUserId: 'user_id_here'
+  boxClientId: 'CLIENT_ID',
+  boxClientSecret: 'CLIENT_SECRET',
+  boxUserId: 'USER_ID'
 });
 
 const loader = new BoxLoader({
@@ -131,6 +133,17 @@ const loader = new BoxLoader({
 
 const docs = await loader.load();
 ```
+
+### CCG user-token prerequisites
+
+To obtain CCG user access tokens (Box-managed users), ensure the following in the Box Developer Console for your app, then re-authorize the app in the Admin Console:
+
+- App Access Level: set to "App + Enterprise Access".
+- Client Credentials Grant: enable "Generate user access tokens".
+  - Choose "All managed users" or "Select users" and include the specific user.
+- Scopes: enable read scopes required for file/folder access.
+
+The `boxUserId` must be the numeric Box user ID and the user must be a managed user in the same enterprise.
 
 ## Document Loaders
 
@@ -213,7 +226,7 @@ When errors occur, the loader will log warnings but continue processing other fi
 
 ### Markdown representation support
 
-For the following file types, the loader requests Box's markdown representation (REPRESENTATION_TYPE="markdown") for improved formatting:
+For the following file types, the loader requests Box's markdown representation:
 
 - Microsoft Office: `.docx`, `.pptx`, `.xls`, `.xlsx`, `.xlsm`
 - Google Workspace: `.gdoc`, `.gslide`, `.gslides`, `.gsheet`

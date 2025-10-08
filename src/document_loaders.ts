@@ -6,6 +6,43 @@ import { isImageFile, isVideoFile } from './utilities';
 
 const BOX_AI_LIBRARY = 'langchain.js';
 
+type AccessTokenLike = { accessToken?: string };
+
+interface BoxRepresentationStatus {
+  state?: 'success' | 'viewable' | 'pending' | 'processing' | 'none' | 'error' | 'failed';
+  message?: string;
+}
+
+interface BoxRepresentationInfo { url?: string }
+
+interface BoxRepresentation {
+  representation?: string;
+  status?: BoxRepresentationStatus;
+  info?: BoxRepresentationInfo;
+}
+
+interface BoxFileWithRepresentations {
+  representations?: { entries?: BoxRepresentation[] };
+  name?: string;
+  type?: string;
+  extension?: string;
+  size?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+}
+
+interface GetFileByIdOptions {
+  headers?: Record<string, string>;
+  queryParams?: { fields?: string[] };
+}
+
+interface FolderItemsOptions {
+  offset: number;
+  limit: number;
+  fields?: string[];
+  headers?: Record<string, string>;
+}
+
 /**
  * Box document loader that can load files by ID or from folders
  */
@@ -92,11 +129,11 @@ export class BoxLoader extends BaseDocumentLoader {
   private async loadFileById(fileId: string): Promise<Document | null> {
     try {
       const client = await this.getClient();
-      const token = await (client as any).auth.retrieveToken();
+      const token = await (client as unknown as { auth: { retrieveToken: () => Promise<AccessTokenLike> } }).auth.retrieveToken();
 
       const fileInfo = await client.files.getFileById(fileId, {
         headers: { 'x-box-ai-library': BOX_AI_LIBRARY }
-      } as any);
+      } as GetFileByIdOptions) as BoxFileWithRepresentations;
 
       const fileName = fileInfo.name || '';
       if (isImageFile(fileName) || isVideoFile(fileName)) {
@@ -111,7 +148,7 @@ export class BoxLoader extends BaseDocumentLoader {
         const { content: extracted } = await this.extractRepresentationContent(client, fileId, token, fileName, repType);
         content = extracted;
       } catch (error) {
-        const anyError = error as any;
+        const anyError = error as { statusCode?: number; response?: { status?: number }; message?: string };
         const status = anyError?.statusCode || anyError?.response?.status;
         if (status === 401 || status === 403) {
           console.error(`Authentication error accessing file ${fileName} (ID: ${fileId}): invalid or expired token.`, error);
@@ -139,7 +176,7 @@ export class BoxLoader extends BaseDocumentLoader {
         }
       });
     } catch (error) {
-      const anyError = error as any;
+      const anyError = error as { statusCode?: number; response?: { status?: number; body?: { message?: string } }; status?: number; message?: string };
       const status = anyError?.statusCode || anyError?.response?.status || anyError?.status;
       const message = anyError?.message || anyError?.response?.body?.message;
       if (status === 401 || status === 403) {
@@ -162,7 +199,7 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Retrieve a ready representation or return a descriptive content message
    */
-  private async getReadyRepresentation(client: BoxClient, fileId: string, token: any, fileName: string, repType: string): Promise<{ rep?: any; content?: string }> {
+  private async getReadyRepresentation(client: BoxClient, fileId: string, token: AccessTokenLike, fileName: string, repType: string): Promise<{ rep?: BoxRepresentation; content?: string }> {
     const fileWithReps = await client.files.getFileById(fileId, {
       headers: {
         'x-rep-hints': repType,
@@ -170,21 +207,21 @@ export class BoxLoader extends BaseDocumentLoader {
         "Authorization": `Bearer ${token?.accessToken}`
       },
       queryParams: { fields: ['name', 'representations', 'type'] },
-    } as any);
+    } as GetFileByIdOptions) as BoxFileWithRepresentations;
 
     if (!fileWithReps.representations || !fileWithReps.representations.entries) {
       console.error(`Representations list is empty for ${fileName} (ID: ${fileId})`);
       return { content: `[Error: No representations available for ${fileName}]` };
     }
 
-    const found = fileWithReps.representations.entries.find((rep: any) => rep.representation === repType);
+    const found = fileWithReps.representations.entries.find((rep: BoxRepresentation) => rep.representation === repType);
     if (!found) {
       console.error(`No ${repType} representation found for ${fileName} (ID: ${fileId})`);
       return { content: `[Error: No ${repType} representation available for ${fileName}]` };
     }
 
-    let workingRep: any = found;
-    let state: string | undefined = workingRep.status?.state as string | undefined;
+    let workingRep: BoxRepresentation = found;
+    let state: BoxRepresentationStatus['state'] | undefined = workingRep.status?.state;
     let isReady = (!state && !!workingRep.info?.url) || state === 'success' || state === 'viewable';
 
     if (!isReady && (state === 'pending' || state === 'processing')) {
@@ -201,11 +238,11 @@ export class BoxLoader extends BaseDocumentLoader {
             "Authorization": `Bearer ${token?.accessToken}`
           },
           queryParams: { fields: ['name', 'representations', 'type'] },
-        } as any);
-        const refreshedRep = refreshed.representations?.entries?.find((rep: any) => rep.representation === repType);
+        } as GetFileByIdOptions) as BoxFileWithRepresentations;
+        const refreshedRep = refreshed.representations?.entries?.find((rep: BoxRepresentation) => rep.representation === repType);
         if (refreshedRep) {
           workingRep = refreshedRep;
-          state = workingRep.status?.state as string | undefined;
+          state = workingRep.status?.state;
           isReady = (!state && !!workingRep.info?.url) || state === 'success' || state === 'viewable';
           if (isReady) break;
         }
@@ -217,7 +254,7 @@ export class BoxLoader extends BaseDocumentLoader {
     }
 
     if (state === 'pending' || state === 'processing') {
-      const statusMessage = (workingRep.status as any)?.message as string | undefined;
+      const statusMessage = workingRep.status?.message as string | undefined;
       console.warn(`${repType} representation is not ready for ${fileName} (ID: ${fileId}) yet: ${state}${statusMessage ? ` - ${statusMessage}` : ''}`);
       return { content: `[Info: ${repType} representation still processing for ${fileName}]` };
     }
@@ -226,7 +263,7 @@ export class BoxLoader extends BaseDocumentLoader {
       return { content: `[Error: No ${repType} representation available for ${fileName}]` };
     }
     if (state === 'error' || state === 'failed') {
-      const statusMessage = (workingRep.status as any)?.message as string | undefined;
+      const statusMessage = workingRep.status?.message as string | undefined;
       console.error(`${repType} representation generation failed for ${fileName} (ID: ${fileId})${statusMessage ? `: ${statusMessage}` : ''}`);
       return { content: `[Error: ${repType} extraction failed for ${fileName}]` };
     }
@@ -238,7 +275,7 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Fetch representation template URL from info URL
    */
-  private async getRepresentationUrlFromInfo(infoUrl: string | undefined, token: any, fileName: string, fileId: string, repType: string): Promise<{ url?: string; content?: string }> {
+  private async getRepresentationUrlFromInfo(infoUrl: string | undefined, token: AccessTokenLike, fileName: string, fileId: string, repType: string): Promise<{ url?: string; content?: string }> {
     if (!infoUrl) {
       console.error(`Missing representation info URL for ${fileName} (ID: ${fileId})`);
       return { content: `[Error: No ${repType} representation URL available for ${fileName}]` };
@@ -270,7 +307,7 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Download final text from representation URL
    */
-  private async fetchFromRepresentationUrl(representationUrl: string, token: any, fileName: string, repType: string): Promise<{ text?: string; content?: string }> {
+  private async fetchFromRepresentationUrl(representationUrl: string, token: AccessTokenLike, fileName: string, repType: string): Promise<{ text?: string; content?: string }> {
     try {
       const textResponse = await fetch(representationUrl, {
         headers: { "Authorization": `Bearer ${token?.accessToken}`, 'x-box-ai-library': BOX_AI_LIBRARY },
@@ -295,7 +332,7 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Extract representation content with retries and consistent logging
    */
-  private async extractRepresentationContent(client: BoxClient, fileId: string, token: any, fileName: string, repType: string): Promise<{ content: string }> {
+  private async extractRepresentationContent(client: BoxClient, fileId: string, token: AccessTokenLike, fileName: string, repType: string): Promise<{ content: string }> {
     const { rep, content: repMessage } = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
     if (!rep) {
       return { content: repMessage || '' };
@@ -385,7 +422,7 @@ export class BoxLoader extends BaseDocumentLoader {
     // Using a do-while pattern with a guard variable.
     let hasMore = true;
     while (hasMore) {
-      const response = await (client.folders as any).getFolderItems(folderId, {
+      const response = await (client.folders as unknown as { getFolderItems: (folderId: string, options: FolderItemsOptions) => Promise<{ entries?: Item[] }> }).getFolderItems(folderId, {
         offset,
         limit,
         fields: ['id', 'name', 'type', 'size', 'created_at', 'modified_at', 'extension'],
@@ -473,7 +510,7 @@ export class BoxLoader extends BaseDocumentLoader {
     let hasMore = true;
     while (hasMore) {
       try {
-        const response = await (client.folders as any).getFolderItems(folderId, {
+        const response = await (client.folders as unknown as { getFolderItems: (folderId: string, options: FolderItemsOptions) => Promise<{ entries?: Item[] }> }).getFolderItems(folderId, {
           offset,
           limit,
           fields: ['id', 'name', 'type', 'size', 'created_at', 'modified_at', 'extension'],
