@@ -1,4 +1,4 @@
-# @langchain/box
+# @langchainjs-box
 
 This package contains the Box document loader for LangChain.js. For more information about Box, check out our [developer documentation](https://developer.box.com/).
 
@@ -9,16 +9,17 @@ In order to integrate with Box, you need a few things:
 - A Box instance — if you are not a current Box customer, [sign up for a free dev account](https://developer.box.com/)
 - A Box app — more on how to [create an app](https://developer.box.com/guides/applications/)
 - Your app approved in your Box instance — This is done by your Box admin. The good news is if you are using a free developer account, you are the admin. [Authorize your app](https://developer.box.com/guides/authorization/)
+- Node.js >= 20
 
 ## Installation
 
 ```bash
-npm install @langchain/box box-node-sdk@^10
+npm install @langchainjs-box @langchain/core
 ```
 
 ## Authentication
 
-The `@langchain/box` package offers some flexibility to authentication. The most basic authentication method is by using a developer token. This can be found in the [Box developer console](https://app.box.com/developers/console) on the configuration screen. This token is purposely short-lived (1 hour) and is intended for development. With this token, you can add it to your environment as `BOX_DEVELOPER_TOKEN`, you can pass it directly to the loader, or you can use the `BoxAuth` authentication helper class.
+The `@langchainjs-box` package offers some flexibility to authentication. The most basic authentication method is by using a developer token. This can be found in the [Box developer console](https://app.box.com/developers/console) on the configuration screen. This token is purposely short-lived (1 hour) and is intended for development. With this token, you can add it to your environment as `BOX_DEVELOPER_TOKEN`, you can pass it directly to the loader, or you can use the `BoxAuth` authentication helper class.
 
 ### BoxAuth helper class
 
@@ -39,11 +40,11 @@ For more information, learn about how to [set up a Box application](https://deve
 **Token**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
+import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.TOKEN,
-  boxDeveloperToken: 'your_developer_token_here'
+  boxDeveloperToken: 'DEVELOPER_TOKEN'
 });
 
 const loader = new BoxLoader({
@@ -57,7 +58,7 @@ const docs = await loader.load();
 **JWT with a service account**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
+import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.JWT,
@@ -66,7 +67,7 @@ const auth = new BoxAuth({
 
 const loader = new BoxLoader({
   boxAuth: auth,
-  boxFolderId: '12345'
+  boxFolderId: 'FOLDER_ID'
 });
 
 const docs = await loader.load();
@@ -75,17 +76,17 @@ const docs = await loader.load();
 **JWT with a specified user**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
+import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.JWT,
   boxJwtPath: './path/to/jwt-config.json',
-  boxUserId: 'user_id_here'
+  boxUserId: 'USER_ID'
 });
 
 const loader = new BoxLoader({
   boxAuth: auth,
-  boxFolderId: '12345'
+  boxFolderId: 'FOLDER_ID'
 });
 
 const docs = await loader.load();
@@ -94,7 +95,7 @@ const docs = await loader.load();
 **CCG with a service account**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
+import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
@@ -105,7 +106,7 @@ const auth = new BoxAuth({
 
 const loader = new BoxLoader({
   boxAuth: auth,
-  boxFolderId: '12345'
+  boxFolderId: 'FOLDER_ID'
 });
 
 const docs = await loader.load();
@@ -114,7 +115,7 @@ const docs = await loader.load();
 **CCG with a specified user**
 
 ```typescript
-import { BoxLoader, BoxAuth, BoxAuthType } from '@langchain/box';
+import { BoxLoader, BoxAuth, BoxAuthType } from '@langchainjs-box';
 
 const auth = new BoxAuth({
   authType: BoxAuthType.CCG,
@@ -125,7 +126,7 @@ const auth = new BoxAuth({
 
 const loader = new BoxLoader({
   boxAuth: auth,
-  boxFolderId: '12345'
+  boxFolderId: 'FOLDER_ID'
 });
 
 const docs = await loader.load();
@@ -142,13 +143,13 @@ If getting files from a folder with folder ID, you can also set a boolean to tel
 ### Load files
 
 ```typescript
-import { BoxLoader } from '@langchain/box';
+import { BoxLoader } from '@langchainjs-box';
 
 // Using environment variable BOX_DEVELOPER_TOKEN
 process.env.BOX_DEVELOPER_TOKEN = 'your_developer_token_here';
 
 const loader = new BoxLoader({
-  boxFileIds: ['12345', '67890'],
+  boxFileIds: ['FILE_ID_1', 'FILE_ID_2'],
   characterLimit: 10000  // Optional. Defaults to no limit
 });
 
@@ -158,13 +159,13 @@ const docs = await loader.load();
 ### Load from folder
 
 ```typescript
-import { BoxLoader } from '@langchain/box';
+import { BoxLoader } from '@langchainjs-box';
 
 // Using environment variable BOX_DEVELOPER_TOKEN
 process.env.BOX_DEVELOPER_TOKEN = 'your_developer_token_here';
 
 const loader = new BoxLoader({
-  boxFolderId: '12345',
+  boxFolderId: 'FOLDER_ID',
   recursive: false,  // Optional. return entire tree, defaults to false
   characterLimit: 10000  // Optional. Defaults to no limit
 });
@@ -175,10 +176,10 @@ const docs = await loader.load();
 ### Lazy loading
 
 ```typescript
-import { BoxLoader } from '@langchain/box';
+import { BoxLoader } from '@langchainjs-box';
 
 const loader = new BoxLoader({
-  boxFolderId: '12345'
+  boxFolderId: 'FOLDER_ID'
 });
 
 // Load documents one by one
@@ -186,21 +187,6 @@ for await (const doc of loader.lazyLoad()) {
   console.log(doc.metadata.file_name);
   // Process each document
 }
-```
-
-## Utilities
-
-The package also provides utility functions:
-
-```typescript
-import { createBoxAuthFromEnv, isTextFile } from '@langchain/box';
-
-// Create authentication from environment variables
-const auth = createBoxAuthFromEnv();
-
-// Check if a file is a text file
-const isText = isTextFile('document.txt'); // true
-const isNotText = isTextFile('image.jpg'); // false
 ```
 
 ## Environment Variables
@@ -224,6 +210,16 @@ The loader includes error handling for common scenarios:
 - Invalid file or folder IDs
 
 When errors occur, the loader will log warnings but continue processing other files.
+
+### Markdown representation support
+
+For the following file types, the loader requests Box's markdown representation (REPRESENTATION_TYPE="markdown") for improved formatting:
+
+- Microsoft Office: `.docx`, `.pptx`, `.xls`, `.xlsx`, `.xlsm`
+- Google Workspace: `.gdoc`, `.gslide`, `.gslides`, `.gsheet`
+- PDF: `.pdf`
+
+For other supported text-like files, the loader falls back to the extracted text representation.
 
 ## License
 

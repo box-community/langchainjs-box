@@ -4,9 +4,7 @@ import { BoxAuth, BoxLoaderOptions, BoxClient, BoxAuthType } from './types';
 import type { Item } from 'box-node-sdk/lib/schemas/item.js';
 import { isImageFile, isVideoFile } from './utilities';
 
-const REPRESENTATION_TYPE = 'extracted_text';
 const BOX_AI_LIBRARY = 'langchain.js';
-// const REPRESENTATION_TYPE = 'markdown';
 
 /**
  * Box document loader that can load files by ID or from folders
@@ -35,8 +33,9 @@ export class BoxLoader extends BaseDocumentLoader {
       }
     }
 
-    this.boxAuth = options.boxAuth;
-    this.boxClient = options.boxClient;
+    // Preserve env-created auth/client when options don't provide one
+    this.boxAuth = options.boxAuth ?? this.boxAuth;
+    this.boxClient = options.boxClient ?? this.boxClient;
     this.boxFileIds = options.boxFileIds;
     this.boxFolderId = options.boxFolderId;
     this.recursive = options.recursive || false;
@@ -105,18 +104,47 @@ export class BoxLoader extends BaseDocumentLoader {
         return null;
       }
 
+      const repType = this.getRepresentationTypeForFilename(fileName);
+
       let content = '';
       try {
-        const { rep, content: repContent } = await this.getReadyRepresentation(client, fileId, token, fileName);
+        const { rep, content: repContent } = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
         if (!rep) {
           content = repContent || '';
         } else {
-          const { url, content: urlContent } = await this.getRepresentationUrlFromInfo(rep.info?.url, token, fileName, fileId);
+          const { url, content: urlContent } = await this.getRepresentationUrlFromInfo(rep.info?.url, token, fileName, fileId, repType);
           if (!url) {
             content = urlContent || '';
           } else {
-            const { text, content: textContent } = await this.fetchTextFromRepresentationUrl(url, token, fileName);
+            const { text, content: textContent } = await this.fetchFromRepresentationUrl(url, token, fileName, repType);
             content = text ?? textContent ?? '';
+
+            // If representation content is empty on first try, refresh status and retry fetch
+            if ((content ?? '').trim().length === 0) {
+              console.warn(`Empty ${repType} content received for ${fileName}. Rechecking representation status and retrying...`);
+              const maxEmptyRetries = 2;
+              for (let attempt = 1; attempt <= maxEmptyRetries; attempt++) {
+                const delayMs = 1000 * attempt;
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+                try {
+                  const refreshed = await this.getReadyRepresentation(client, fileId, token, fileName, repType);
+                  if (!refreshed.rep) {
+                    continue;
+                  }
+                  const { url: retryUrl } = await this.getRepresentationUrlFromInfo(refreshed.rep.info?.url, token, fileName, fileId, repType);
+                  if (!retryUrl) {
+                    continue;
+                  }
+                  const { text: retryText } = await this.fetchFromRepresentationUrl(retryUrl, token, fileName, repType);
+                  if ((retryText ?? '').trim().length > 0) {
+                    content = retryText as string;
+                    break;
+                  }
+                } catch (retryError) {
+                  console.warn(`Retry ${attempt}/${maxEmptyRetries} failed to retrieve non-empty ${repType} content for ${fileName}.`, retryError);
+                }
+              }
+            }
           }
         }
       } catch (error) {
@@ -160,13 +188,21 @@ export class BoxLoader extends BaseDocumentLoader {
     }
   }
 
+  private getRepresentationTypeForFilename(fileName: string): string {
+    const lower = (fileName || '').toLowerCase();
+    const dotIndex = lower.lastIndexOf('.');
+    const ext = dotIndex >= 0 ? lower.substring(dotIndex) : '';
+    const markdownExts = ['.docx', '.pptx', '.xls', '.xlsx', '.xlsm', '.gdoc', '.gslide', '.gslides', '.gsheet', '.pdf'];
+    return markdownExts.includes(ext) ? "markdown" : "extracted_text";
+  }
+
   /**
    * Retrieve a ready representation or return a descriptive content message
    */
-  private async getReadyRepresentation(client: BoxClient, fileId: string, token: any, fileName: string): Promise<{ rep?: any; content?: string }> {
+  private async getReadyRepresentation(client: BoxClient, fileId: string, token: any, fileName: string, repType: string): Promise<{ rep?: any; content?: string }> {
     const fileWithReps = await client.files.getFileById(fileId, {
       headers: {
-        'x-rep-hints': REPRESENTATION_TYPE,
+        'x-rep-hints': repType,
         'x-box-ai-library': BOX_AI_LIBRARY,
         "Authorization": `Bearer ${token?.accessToken}`
       },
@@ -178,10 +214,10 @@ export class BoxLoader extends BaseDocumentLoader {
       return { content: `[Error: No representations available for ${fileName}]` };
     }
 
-    const found = fileWithReps.representations.entries.find((rep: any) => rep.representation === REPRESENTATION_TYPE);
+    const found = fileWithReps.representations.entries.find((rep: any) => rep.representation === repType);
     if (!found) {
-      console.error(`No ${REPRESENTATION_TYPE} representation found for ${fileName} (ID: ${fileId})`);
-      return { content: `[Error: No ${REPRESENTATION_TYPE} representation available for ${fileName}]` };
+      console.error(`No ${repType} representation found for ${fileName} (ID: ${fileId})`);
+      return { content: `[Error: No ${repType} representation available for ${fileName}]` };
     }
 
     let workingRep: any = found;
@@ -192,18 +228,18 @@ export class BoxLoader extends BaseDocumentLoader {
       const maxRetries = 3;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const delayMs = 1500 * attempt;
-        console.warn(`Text representation not ready for ${fileName} (ID: ${fileId}). Retrying in ${delayMs}ms (${attempt}/${maxRetries})...`);
+        console.warn(`${repType} representation not ready for ${fileName} (ID: ${fileId}). Retrying in ${delayMs}ms (${attempt}/${maxRetries})...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
 
         const refreshed = await client.files.getFileById(fileId, {
           headers: {
-            'x-rep-hints': REPRESENTATION_TYPE,
+            'x-rep-hints': repType,
             'x-box-ai-library': BOX_AI_LIBRARY,
             "Authorization": `Bearer ${token?.accessToken}`
           },
           queryParams: { fields: ['name', 'representations', 'type'] },
         } as any);
-        const refreshedRep = refreshed.representations?.entries?.find((rep: any) => rep.representation === REPRESENTATION_TYPE);
+        const refreshedRep = refreshed.representations?.entries?.find((rep: any) => rep.representation === repType);
         if (refreshedRep) {
           workingRep = refreshedRep;
           state = workingRep.status?.state as string | undefined;
@@ -219,38 +255,38 @@ export class BoxLoader extends BaseDocumentLoader {
 
     if (state === 'pending' || state === 'processing') {
       const statusMessage = (workingRep.status as any)?.message as string | undefined;
-      console.warn(`${REPRESENTATION_TYPE} representation is not ready for ${fileName} (ID: ${fileId}) yet: ${state}${statusMessage ? ` - ${statusMessage}` : ''}`);
-      return { content: `[Info: ${REPRESENTATION_TYPE} representation still processing for ${fileName}]` };
+      console.warn(`${repType} representation is not ready for ${fileName} (ID: ${fileId}) yet: ${state}${statusMessage ? ` - ${statusMessage}` : ''}`);
+      return { content: `[Info: ${repType} representation still processing for ${fileName}]` };
     }
     if (state === 'none') {
-      console.warn(`No ${REPRESENTATION_TYPE} representation available for ${fileName} (ID: ${fileId}).`);
-      return { content: `[Error: No ${REPRESENTATION_TYPE} representation available for ${fileName}]` };
+      console.warn(`No ${repType} representation available for ${fileName} (ID: ${fileId}).`);
+      return { content: `[Error: No ${repType} representation available for ${fileName}]` };
     }
     if (state === 'error' || state === 'failed') {
       const statusMessage = (workingRep.status as any)?.message as string | undefined;
-      console.error(`${REPRESENTATION_TYPE} representation generation failed for ${fileName} (ID: ${fileId})${statusMessage ? `: ${statusMessage}` : ''}`);
-      return { content: `[Error: ${REPRESENTATION_TYPE} extraction failed for ${fileName}]` };
+      console.error(`${repType} representation generation failed for ${fileName} (ID: ${fileId})${statusMessage ? `: ${statusMessage}` : ''}`);
+      return { content: `[Error: ${repType} extraction failed for ${fileName}]` };
     }
 
-    console.warn(`Unknown ${REPRESENTATION_TYPE} representation state for ${fileName} (ID: ${fileId}): ${state ?? 'unknown'}`);
-    return { content: `[Error: Unknown ${REPRESENTATION_TYPE} representation state for ${fileName}]` };
+    console.warn(`Unknown ${repType} representation state for ${fileName} (ID: ${fileId}): ${state ?? 'unknown'}`);
+    return { content: `[Error: Unknown ${repType} representation state for ${fileName}]` };
   }
 
   /**
    * Fetch representation template URL from info URL
    */
-  private async getRepresentationUrlFromInfo(infoUrl: string | undefined, token: any, fileName: string, fileId: string): Promise<{ url?: string; content?: string }> {
+  private async getRepresentationUrlFromInfo(infoUrl: string | undefined, token: any, fileName: string, fileId: string, repType: string): Promise<{ url?: string; content?: string }> {
     if (!infoUrl) {
       console.error(`Missing representation info URL for ${fileName} (ID: ${fileId})`);
-      return { content: `[Error: No ${REPRESENTATION_TYPE} representation URL available for ${fileName}]` };
+      return { content: `[Error: No ${repType} representation URL available for ${fileName}]` };
     }
 
     const response = await fetch(infoUrl, {
       headers: { "Authorization": `Bearer ${token?.accessToken}`, 'x-box-ai-library': BOX_AI_LIBRARY },
     });
     if (response.status !== 200) {
-      console.error(`Failed to fetch ${REPRESENTATION_TYPE} representation URL for ${fileName}: ${response.status} ${response.statusText}`);
-      return { content: `[Error: Failed to get ${REPRESENTATION_TYPE} representation URL for ${fileName} - Status: ${response.status}]` };
+      console.error(`Failed to fetch ${repType} representation URL for ${fileName}: ${response.status} ${response.statusText}`);
+      return { content: `[Error: Failed to get ${repType} representation URL for ${fileName} - Status: ${response.status}]` };
     }
     try {
       const representationData = await response.text();
@@ -258,7 +294,7 @@ export class BoxLoader extends BaseDocumentLoader {
       const urlTemplate = parsedData?.content?.url_template;
       if (!urlTemplate) {
         console.error(`No url_template found in representation data for ${fileName} (ID: ${fileId})`);
-        return { content: `[Error: No ${REPRESENTATION_TYPE} representation URL available for ${fileName}]` };
+        return { content: `[Error: No ${repType} representation URL available for ${fileName}]` };
       }
       const representationUrl = urlTemplate.replace('{+asset_path}', '');
       return { url: representationUrl };
@@ -271,21 +307,21 @@ export class BoxLoader extends BaseDocumentLoader {
   /**
    * Download final text from representation URL
    */
-  private async fetchTextFromRepresentationUrl(representationUrl: string, token: any, fileName: string): Promise<{ text?: string; content?: string }> {
+  private async fetchFromRepresentationUrl(representationUrl: string, token: any, fileName: string, repType: string): Promise<{ text?: string; content?: string }> {
     try {
       const textResponse = await fetch(representationUrl, {
         headers: { "Authorization": `Bearer ${token?.accessToken}`, 'x-box-ai-library': BOX_AI_LIBRARY },
       });
       if (!textResponse.ok) {
         console.error(`Failed to fetch text from URL template for ${fileName}: ${textResponse.status} ${textResponse.statusText}`);
-        return { content: `[Error: Failed to fetch ${REPRESENTATION_TYPE} content for ${fileName} - Status: ${textResponse.status}]` };
+        return { content: `[Error: Failed to fetch ${repType} content for ${fileName} - Status: ${textResponse.status}]` };
       }
       const text = await textResponse.text();
-      console.log(`Successfully extracted ${REPRESENTATION_TYPE} content from ${fileName}`);
+      console.log(`Successfully extracted ${repType} content from ${fileName}`);
       return { text };
     } catch (fetchError) {
       console.error(`Network error fetching representation for ${fileName}:`, fetchError);
-      return { content: `[Error: Network error while fetching ${REPRESENTATION_TYPE} representation for ${fileName}]` };
+      return { content: `[Error: Network error while fetching ${repType} representation for ${fileName}]` };
     }
   }
 
