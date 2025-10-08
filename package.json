@@ -55,10 +55,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/box/box-langchainjs-connector.git"
+    "url": "git+https://github.com/box-community/langchainjs-box.git"
   },
   "bugs": {
-    "url": "https://github.com/box/box-langchainjs-connector/issues"
+    "url": "https://github.com/box-community/langchainjs-box/issues"
   },
-  "homepage": "https://github.com/box/box-langchainjs-connector#readme"
+  "homepage": "https://github.com/box-community/langchainjs-box#readme"
 }
